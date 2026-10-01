@@ -46,8 +46,12 @@ def _style(ax, title: str) -> None:
 def ablation(games: pd.DataFrame, test_seasons: list[str]):
     """H4: ladder and leave-one-group-out, each feature set tuned and tested like Model 3."""
     cache: dict = {}
+    # LightGBM's column sampling depends on column order, so every feature set uses
+    # Model 3's order; otherwise the same features could give a different model.
+    canonical = [f for g in FEATURE_GROUPS.values() for f in g] + ELO_FEATURES
 
     def predict(features: list[str]) -> pd.Series:
+        features = [f for f in canonical if f in set(features)]
         key = tuple(features)
         if key not in cache:
             params, _ = tune_lgb(games, features)
@@ -88,7 +92,8 @@ def early_vs_late(pred: pd.DataFrame):
     rows, by_bin = [], []
     for label, elo_col in (("H5: Model 1 minus Model 3", "p_elo"),
                            ("Exploratory: Model 1c minus Model 3", "p_elo_1c")):
-        gap = per_game_log_loss(pred["home_win"], pred[elo_col]) - per_game_log_loss(pred["home_win"], pred["p_lgb_elo"])
+        gap = pd.Series(per_game_log_loss(pred["home_win"], pred[elo_col])
+                        - per_game_log_loss(pred["home_win"], pred["p_lgb_elo"]), index=pred.index)
         rows.append({"comparison": label, "n_early": int(early.sum()), "n_later": int((~early).sum()),
                      "early_gap": gap[early].mean(), "later_gap": gap[~early].mean(),
                      **{f"diff_{k}": v for k, v in bootstrap_group_gap(gap[early], gap[~early]).items()}})
