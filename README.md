@@ -64,6 +64,24 @@ python -m src.analysis           # step 3: ablation, early season, home court (a
 
 On macOS, LightGBM also needs OpenMP: `brew install libomp`.
 
+## Live 2026-27 predictions
+
+The two models that tied in the backtest, Model 1c (Elo) and Model 3
+(LightGBM + Elo), predict every 2026-27 regular-season game before tip-off.
+
+- **Frozen before the season.** `python -m src.live freeze` tuned and trained
+  both models on 2015-16 to 2025-26 and saved them to `models/2026-27/`. They
+  are not retrained during the season; ratings and rolling stats still update
+  as results come in.
+- **Published before tip-off.** `python -m src.live predict --commit` writes
+  `predictions/2026-27/<date>.csv` and pushes it, so the git timestamp proves
+  each prediction came first. Files are never overwritten.
+- **Graded honestly.** `python -m src.live score --commit` updates
+  [`predictions/2026-27/scoreboard.md`](predictions/2026-27/scoreboard.md),
+  counting only predictions made before the scheduled tip-off.
+
+`scripts/daily.sh` runs scoring and prediction together, once a day.
+
 Results are written to `results/` (summary, per-season metrics, significance
 tests, calibration plot).
 
@@ -77,6 +95,10 @@ src/evaluate.py   shared metrics, bootstrap tests, calibration plot
 src/backtest.py   step 1 experiment
 src/backtest_ml.py  step 2 experiment (Models 1b, 1c, 2, 3)
 src/analysis.py   step 3 analyses (H4-H6)
+src/live.py       step 4: freeze, predict and score the live season
+models/2026-27/   frozen live models (Model 3 booster + settings)
+predictions/      live prediction files and scoreboard
+scripts/daily.sh  daily live run
 tests/            unit tests (Elo correctness, no leakage in Elo or features)
 results/          generated metrics and figures
 ```

@@ -92,6 +92,27 @@ def team_rows_to_games(rows: pd.DataFrame, season: str) -> pd.DataFrame:
     return games.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
+def fetch_schedule(season: str) -> pd.DataFrame:
+    """Regular-season schedule (played and upcoming), one row per game.
+
+    Games whose teams aren't known yet (e.g. NBA Cup knockouts) are dropped.
+    `game_date` is the US Eastern date; `tipoff_utc` is the scheduled start.
+    """
+    from nba_api.stats.endpoints import scheduleleaguev2
+
+    s = scheduleleaguev2.ScheduleLeagueV2(season=season, league_id="00", timeout=60).get_data_frames()[0]
+    s = s[s["gameId"].str.startswith("002")].dropna(subset=["homeTeam_teamTricode", "awayTeam_teamTricode"])
+    return pd.DataFrame({
+        "game_id": s["gameId"],
+        "game_date": pd.to_datetime(s["gameDateEst"].str[:10]),
+        "tipoff_utc": pd.to_datetime(s["gameDateTimeUTC"], utc=True),
+        "home_team_id": s["homeTeam_teamId"].astype(int), "home_team": s["homeTeam_teamTricode"],
+        "away_team_id": s["awayTeam_teamId"].astype(int), "away_team": s["awayTeam_teamTricode"],
+        "status": s["gameStatus"].astype(int),  # 1 = not started, 2 = in progress, 3 = final
+        "season": season,
+    }).reset_index(drop=True)
+
+
 def sanity_check(games: pd.DataFrame, season: str) -> None:
     """Warn (don't fail) if a team's game count looks unusual for the season."""
     counts = pd.concat([games["home_team"], games["away_team"]]).value_counts()
