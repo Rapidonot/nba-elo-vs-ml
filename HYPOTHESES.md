@@ -39,3 +39,13 @@ difference excludes zero.
 ## Notes added after registration
 
 _(dated entries only)_
+
+**2026-10-01, written before any LightGBM model was trained.** Step 1 showed
+Elo over-predicting home wins in every test season: its home advantage was
+tuned on 2015-16 to 2018-19, when home teams won more often than they do now.
+LightGBM is retrained before each test season, so it can learn the lower home
+advantage, which would make the Elo comparison unfair. I am adding
+**Model 1b**: Elo whose home advantage updates a little after every game,
+tuned on the same seasons as Model 1. H2 is still tested against Model 1, as
+registered; Model 3 vs. Model 1b is reported alongside it as the fairer
+comparison. H1 to H6 are unchanged.
