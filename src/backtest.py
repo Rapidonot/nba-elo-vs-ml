@@ -44,14 +44,15 @@ def home_rate_baseline(games: pd.DataFrame) -> pd.Series:
     return p
 
 
-def tune_elo(games: pd.DataFrame, home_k_grid=(0.0,)) -> tuple[EloConfig, pd.DataFrame]:
-    """Grid-search K and home advantage (and, for Model 1b, home_k), scored on tune seasons only."""
+def tune_elo(games: pd.DataFrame, home_k_grid=(0.0,), seasons=TUNE,
+             home_grid=HOME_GRID) -> tuple[EloConfig, pd.DataFrame]:
+    """Grid-search K and home advantage (and, for Model 1b, home_k), scored on `seasons` only."""
     rows = []
-    for k, h, hk in itertools.product(K_GRID, HOME_GRID, home_k_grid):
+    for k, h, hk in itertools.product(K_GRID, home_grid, home_k_grid):
         cfg = EloConfig(k=k, home_adv=h, home_k=hk)
         preds, _ = run_elo(games, cfg)
         merged = games[["game_id", "season", "home_win"]].merge(preds, on="game_id")
-        tune_rows = merged[merged["season"].isin(TUNE)]
+        tune_rows = merged[merged["season"].isin(seasons)]
         rows.append({"k": k, "home_adv": h, "home_k": hk, **score(tune_rows["home_win"], tune_rows["p_elo"])})
     table = pd.DataFrame(rows).sort_values("log_loss")
     best = table.iloc[0]

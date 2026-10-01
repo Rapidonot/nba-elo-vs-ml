@@ -5,6 +5,9 @@ Step 2 backtest: Elo vs. LightGBM.
     Model 1  : Elo, fixed home advantage (as registered)
     Model 1b : Elo whose home advantage is learned game by game (fairness check,
                see the dated note in HYPOTHESES.md)
+    Model 1c : Elo re-tuned before each test season on all earlier seasons,
+               the same way LightGBM is retrained (exploratory, added after
+               seeing step 2 results; see HYPOTHESES.md)
     Model 2  : LightGBM on all feature groups, WITHOUT Elo
     Model 3  : LightGBM on all feature groups plus Elo ratings
 
@@ -37,6 +40,7 @@ from .evaluate import bootstrap_log_loss_diff, calibration_plot, score
 from .features import ELO_FEATURES, FEATURE_GROUPS, build_features
 
 HOME_K_GRID = [0.0, 0.25, 0.5, 1.0, 2.0, 4.0]
+HOME_GRID_1C = [0, 25, 50, 75, 100, 125]  # widened so the grid can't cap Model 1c's answer
 LGB_FIXED = dict(objective="binary", learning_rate=0.02, subsample=0.8, subsample_freq=1,
                  colsample_bytree=0.8, reg_lambda=1.0, random_state=42, deterministic=True,
                  force_row_wise=True, n_jobs=1, verbose=-1)
@@ -47,6 +51,7 @@ MODELS = {
     "Model 0: home win rate": "p_home_rate",
     "Model 1: Elo": "p_elo",
     "Model 1b: Elo, learned home adv.": "p_elo_1b",
+    "Model 1c: Elo, re-tuned each season": "p_elo_1c",
     "Model 2: LightGBM, no Elo": "p_lgb_no_elo",
     "Model 3: LightGBM + Elo": "p_lgb_elo",
 }
@@ -54,9 +59,26 @@ MODELS = {
 COMPARISONS = [
     ("H2 (as registered): Model 3 minus Model 1", "p_lgb_elo", "p_elo"),
     ("Fair check: Model 3 minus Model 1b", "p_lgb_elo", "p_elo_1b"),
+    ("Exploratory: Model 3 minus Model 1c", "p_lgb_elo", "p_elo_1c"),
     ("H3: Model 2 minus Model 3", "p_lgb_no_elo", "p_lgb_elo"),
     ("Model 1b minus Model 1", "p_elo_1b", "p_elo"),
+    ("Exploratory: Model 1c minus Model 1", "p_elo_1c", "p_elo"),
 ]
+
+
+def elo_retuned_each_season(games: pd.DataFrame, test_seasons: list[str]) -> tuple[pd.Series, pd.DataFrame]:
+    """Model 1c: before each test season, re-tune Elo on all earlier non-warm-up seasons."""
+    seasons = sorted(games["season"].unique())
+    preds = pd.Series(np.nan, index=games.index)
+    chosen = []
+    for s in test_seasons:
+        earlier = [x for x in seasons[:seasons.index(s)] if x not in WARMUP]
+        cfg, _ = tune_elo(games, seasons=earlier, home_grid=HOME_GRID_1C)
+        p, _ = run_elo(games, cfg)  # predictions for season s use only games before them
+        in_s = games["season"] == s
+        preds[in_s] = games.loc[in_s, ["game_id"]].merge(p, on="game_id")["p_elo"].to_numpy()
+        chosen.append({"season": s, "k": cfg.k, "home_adv": cfg.home_adv})
+    return preds, pd.DataFrame(chosen)
 
 
 def fit_predict(train: pd.DataFrame, test: pd.DataFrame, features: list[str], params: dict):
@@ -96,11 +118,13 @@ def walk_forward(games: pd.DataFrame, features: list[str], params: dict, test_se
     return preds, (gain / gain.sum()).sort_values(ascending=False)
 
 
-def home_adv_plot(games: pd.DataFrame, fixed: float, path: Path) -> None:
-    """Model 1b's learned home advantage over time, against Model 1's fixed value."""
+def home_adv_plot(chosen_1c: pd.DataFrame, fixed: float, path: Path) -> None:
+    """Home advantage Model 1c picks before each test season, against Model 1's fixed value."""
     fig, ax = plt.subplots(figsize=(9, 4.5), dpi=150)
-    ax.plot(games["game_date"], games["elo_home_adv_pre_1b"], linewidth=1.5, label="Model 1b: learned")
-    ax.axhline(fixed, color="grey", linestyle="--", linewidth=1.5, label="Model 1: fixed")
+    ax.plot(chosen_1c["season"], chosen_1c["home_adv"], marker="o", linewidth=2,
+            label="Model 1c: re-tuned before each season")
+    ax.axhline(fixed, color="grey", linestyle="--", linewidth=1.5, label="Model 1: fixed (tuned on 2015-19)")
+    ax.set_ylim(0, max(chosen_1c["home_adv"].max(), fixed) + 25)
     ax.set_ylabel("Home advantage (Elo points)")
     ax.set_title("How much is playing at home worth?", fontweight="bold")
     ax.spines["top"].set_visible(False)
@@ -132,6 +156,8 @@ def main() -> None:
             columns={"elo_home_adv_pre": "elo_home_adv_pre_1b", "p_elo": "p_elo_1b"}), on="game_id")
     print(f"Model 1 : K={cfg1.k:g}, home_adv={cfg1.home_adv:g}")
     print(f"Model 1b: K={cfg1b.k:g}, start home_adv={cfg1b.home_adv:g}, home_k={cfg1b.home_k:g}")
+    games["p_elo_1c"], chosen_1c = elo_retuned_each_season(games, test_seasons)
+    print("Model 1c settings by season:\n" + chosen_1c.to_string(index=False))
 
     # Model 0
     games["p_home_rate"] = home_rate_baseline(games)
@@ -172,9 +198,11 @@ def main() -> None:
     by_season.to_csv(RESULTS / "step2_logloss_by_season.csv", index=False)
     importance.to_csv(RESULTS / "step2_feature_importance.csv")
     tuning_1b.to_csv(RESULTS / "elo_1b_tuning.csv", index=False)
-    calibration_plot(test["home_win"], {n: test[c] for n, c in MODELS.items() if c != "p_home_rate"},
+    chosen_1c.to_csv(RESULTS / "elo_1c_settings_by_season.csv", index=False)
+    plotted = ["p_elo", "p_elo_1c", "p_lgb_no_elo", "p_lgb_elo"]  # 1b is identical to 1 when home_k = 0
+    calibration_plot(test["home_win"], {n: test[c] for n, c in MODELS.items() if c in plotted},
                      RESULTS / "calibration_step2.png", title="Calibration on test seasons: Elo vs. LightGBM")
-    home_adv_plot(games, cfg1.home_adv, RESULTS / "home_advantage_learned.png")
+    home_adv_plot(chosen_1c, cfg1.home_adv, RESULTS / "home_advantage_by_season.png")
     keep = ["game_id", "season", "game_date", "home_team", "away_team", "home_win",
             "home_games_played", "away_games_played", *MODELS.values()]
     test[keep].to_csv(PROCESSED / "predictions_step2.csv", index=False)  # used by step 3 analyses
@@ -185,6 +213,8 @@ def main() -> None:
         f"- Model 1: K = {cfg1.k:g}, home advantage = {cfg1.home_adv:g} Elo points (fixed)",
         f"- Model 1b: K = {cfg1b.k:g}, starting home advantage = {cfg1b.home_adv:g}, "
         f"home-advantage learning rate = {cfg1b.home_k:g}",
+        "- Model 1c (exploratory, re-tuned before each test season on all earlier seasons): "
+        + ", ".join(f"{r.season}: K = {r.k:g}, home adv. = {r.home_adv:g}" for r in chosen_1c.itertuples()),
         f"- Model 2 (LightGBM, no Elo): {chosen['p_lgb_no_elo']}",
         f"- Model 3 (LightGBM + Elo): {chosen['p_lgb_elo']}", "",
         "## Overall", fmt_table(overall), "",
@@ -194,7 +224,7 @@ def main() -> None:
         "## Log loss by season", fmt_table(by_season.rename(columns={v: k.split(":")[0] for k, v in MODELS.items()})), "",
         "## Share of LightGBM gain by feature group", fmt_table(group_share.reset_index(names="group")), "",
         "![Calibration](calibration_step2.png)", "",
-        "![Learned home advantage](home_advantage_learned.png)",
+        "![Home advantage by season](home_advantage_by_season.png)",
     ]
     (RESULTS / "summary_step2.md").write_text("\n".join(summary))
     print("\n" + fmt_table(overall) + "\n\n" + fmt_table(sig))
