@@ -1,0 +1,6 @@
+nba_api>=1.4
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+pytest>=7.0
+# step 2 (LightGBM) will add: lightgbm, scikit-learn
