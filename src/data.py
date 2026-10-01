@@ -52,10 +52,21 @@ def fetch_season(season: str, retries: int = 4, pause: float = 2.0) -> pd.DataFr
 def team_rows_to_games(rows: pd.DataFrame, season: str) -> pd.DataFrame:
     """Pair the home row and away row of each game into a single game row.
 
-    In the MATCHUP column, 'BOS vs. NYK' marks the home team and 'BOS @ NYK' the away team.
+    In the MATCHUP column, 'BOS vs. NYK' and 'NYK @ BOS' both mean BOS is at home.
+    The home team is read from the matchup text rather than from which separator a
+    row uses, because some games (e.g. the 2025 Paris games) list the same
+    'IND @ SAS' matchup on both teams' rows.
     """
     rows = rows.copy()
-    rows["is_home"] = rows["MATCHUP"].str.contains(" vs. ", regex=False)
+    parts = rows["MATCHUP"].str.extract(r"^(\w+) (vs\.|@) (\w+)$")
+    if parts.isna().any().any():
+        raise ValueError(f"{season}: unexpected MATCHUP format: {rows.loc[parts[0].isna(), 'MATCHUP'].unique()}")
+    home_abbr = parts[0].where(parts[1] == "vs.", parts[2])
+    rows["is_home"] = rows["TEAM_ABBREVIATION"] == home_abbr
+    per_game = rows.groupby("GAME_ID")["is_home"].agg(["sum", "size"])
+    bad = per_game[(per_game["sum"] != 1) | (per_game["size"] != 2)]
+    if not bad.empty:
+        raise ValueError(f"{season}: games without exactly one home and one away row: {list(bad.index[:5])}")
     home = rows.loc[rows["is_home"], ["GAME_ID", "GAME_DATE", "TEAM_ID", "TEAM_ABBREVIATION", "PTS"]]
     away = rows.loc[~rows["is_home"], ["GAME_ID", "TEAM_ID", "TEAM_ABBREVIATION", "PTS"]]
 

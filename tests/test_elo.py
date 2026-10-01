@@ -2,6 +2,7 @@
 import pandas as pd
 import pytest
 
+from src.data import team_rows_to_games
 from src.elo import EloConfig, expected_score, run_elo
 
 
@@ -35,3 +36,16 @@ def test_prediction_does_not_use_its_own_result():
 def test_first_game_uses_initial_ratings_plus_home_advantage():
     preds, _ = run_elo(make_games([(110, 100)]))
     assert preds.loc[0, "p_elo"] == pytest.approx(expected_score(EloConfig().home_adv))
+
+
+def test_home_team_found_when_both_rows_share_one_matchup():
+    """Some games (e.g. 2025 Paris) list 'IND @ SAS' on both teams' rows."""
+    rows = pd.DataFrame([
+        {"GAME_ID": "1", "GAME_DATE": "2025-01-25", "TEAM_ID": 10, "TEAM_ABBREVIATION": "SAS", "MATCHUP": "IND @ SAS", "PTS": 98},
+        {"GAME_ID": "1", "GAME_DATE": "2025-01-25", "TEAM_ID": 11, "TEAM_ABBREVIATION": "IND", "MATCHUP": "IND @ SAS", "PTS": 136},
+        {"GAME_ID": "2", "GAME_DATE": "2025-01-26", "TEAM_ID": 12, "TEAM_ABBREVIATION": "BOS", "MATCHUP": "BOS vs. NYK", "PTS": 110},
+        {"GAME_ID": "2", "GAME_DATE": "2025-01-26", "TEAM_ID": 13, "TEAM_ABBREVIATION": "NYK", "MATCHUP": "NYK @ BOS", "PTS": 100},
+    ])
+    games = team_rows_to_games(rows, "2024-25").set_index("game_id")
+    assert games.loc["1", ["home_team", "away_team", "home_win"]].tolist() == ["SAS", "IND", 0]
+    assert games.loc["2", ["home_team", "away_team", "home_win"]].tolist() == ["BOS", "NYK", 1]
