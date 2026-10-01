@@ -8,6 +8,9 @@ based on the result and margin of victory.
 Leakage rule: every prediction is recorded BEFORE that game's result is
 used to update ratings, so each prediction only uses past information.
 The pre-game ratings saved here are later reused as a feature for LightGBM.
+
+Model 1b is the same model with `home_k > 0`: the home-court bonus is also
+learned from results, so it can drift if home advantage changes over time.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ class EloConfig:
     carryover: float = 0.75        # share of last season's rating kept in the new season
     revert_to: float = 1505.0      # league mean that ratings regress toward between seasons
     use_mov: bool = True           # scale updates by margin of victory
+    home_k: float = 0.0            # Model 1b: how fast home_adv learns from results (0 = fixed)
 
 
 def expected_score(rating_diff: float) -> float:
@@ -49,6 +53,7 @@ def run_elo(games: pd.DataFrame, cfg: EloConfig = EloConfig()) -> tuple[pd.DataF
     games = games.sort_values(["game_date", "game_id"])
     ratings: dict = {}
     season = None
+    home_adv = cfg.home_adv  # only changes when cfg.home_k > 0 (Model 1b)
     rows = []
 
     for g in games.itertuples(index=False):
@@ -60,9 +65,9 @@ def run_elo(games: pd.DataFrame, cfg: EloConfig = EloConfig()) -> tuple[pd.DataF
 
         r_home = ratings.get(g.home_team_id, cfg.init)
         r_away = ratings.get(g.away_team_id, cfg.init)
-        diff = r_home + cfg.home_adv - r_away
+        diff = r_home + home_adv - r_away
         p_home = expected_score(diff)
-        rows.append((g.game_id, r_home, r_away, p_home))  # recorded BEFORE the update
+        rows.append((g.game_id, r_home, r_away, home_adv, p_home))  # recorded BEFORE the update
 
         mult = 1.0
         if cfg.use_mov:
@@ -71,6 +76,8 @@ def run_elo(games: pd.DataFrame, cfg: EloConfig = EloConfig()) -> tuple[pd.DataF
         delta = cfg.k * mult * (g.home_win - p_home)
         ratings[g.home_team_id] = r_home + delta
         ratings[g.away_team_id] = r_away - delta
+        # Home teams winning more (less) than expected nudges home_adv up (down)
+        home_adv += cfg.home_k * (g.home_win - p_home)
 
-    preds = pd.DataFrame(rows, columns=["game_id", "elo_home_pre", "elo_away_pre", "p_elo"])
+    preds = pd.DataFrame(rows, columns=["game_id", "elo_home_pre", "elo_away_pre", "elo_home_adv_pre", "p_elo"])
     return preds, ratings

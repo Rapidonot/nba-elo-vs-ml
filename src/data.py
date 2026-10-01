@@ -20,6 +20,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 RAW_PATH = ROOT / "data" / "raw" / "games.csv"
 
+# Team box-score totals kept for each side (used for ratings and four factors in step 2)
+BOX_COLS = ["MIN", "FGM", "FGA", "FG3M", "FTM", "FTA", "OREB", "DREB", "TOV"]
+
 
 def season_label(start_year: int) -> str:
     """2014 -> '2014-15'."""
@@ -67,10 +70,12 @@ def team_rows_to_games(rows: pd.DataFrame, season: str) -> pd.DataFrame:
     bad = per_game[(per_game["sum"] != 1) | (per_game["size"] != 2)]
     if not bad.empty:
         raise ValueError(f"{season}: games without exactly one home and one away row: {list(bad.index[:5])}")
-    home = rows.loc[rows["is_home"], ["GAME_ID", "GAME_DATE", "TEAM_ID", "TEAM_ABBREVIATION", "PTS"]]
-    away = rows.loc[~rows["is_home"], ["GAME_ID", "TEAM_ID", "TEAM_ABBREVIATION", "PTS"]]
+    box = [c for c in BOX_COLS if c in rows.columns]  # tests may pass minimal rows
+    home = rows.loc[rows["is_home"], ["GAME_ID", "GAME_DATE", "TEAM_ID", "TEAM_ABBREVIATION", "PTS", *box]]
+    away = rows.loc[~rows["is_home"], ["GAME_ID", "TEAM_ID", "TEAM_ABBREVIATION", "PTS", *box]]
 
     games = home.merge(away, on="GAME_ID", suffixes=("_home", "_away"), validate="one_to_one")
+    games = games.rename(columns={f"{c}_{side}": f"{side}_{c.lower()}" for c in box for side in ("home", "away")})
     games = games.rename(columns={
         "GAME_ID": "game_id",
         "GAME_DATE": "game_date",

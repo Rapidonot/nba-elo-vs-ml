@@ -44,18 +44,18 @@ def home_rate_baseline(games: pd.DataFrame) -> pd.Series:
     return p
 
 
-def tune_elo(games: pd.DataFrame) -> tuple[EloConfig, pd.DataFrame]:
-    """Grid-search K and home advantage, scored on tune seasons only."""
+def tune_elo(games: pd.DataFrame, home_k_grid=(0.0,)) -> tuple[EloConfig, pd.DataFrame]:
+    """Grid-search K and home advantage (and, for Model 1b, home_k), scored on tune seasons only."""
     rows = []
-    for k, h in itertools.product(K_GRID, HOME_GRID):
-        cfg = EloConfig(k=k, home_adv=h)
+    for k, h, hk in itertools.product(K_GRID, HOME_GRID, home_k_grid):
+        cfg = EloConfig(k=k, home_adv=h, home_k=hk)
         preds, _ = run_elo(games, cfg)
         merged = games[["game_id", "season", "home_win"]].merge(preds, on="game_id")
         tune_rows = merged[merged["season"].isin(TUNE)]
-        rows.append({"k": k, "home_adv": h, **score(tune_rows["home_win"], tune_rows["p_elo"])})
+        rows.append({"k": k, "home_adv": h, "home_k": hk, **score(tune_rows["home_win"], tune_rows["p_elo"])})
     table = pd.DataFrame(rows).sort_values("log_loss")
     best = table.iloc[0]
-    return EloConfig(k=float(best["k"]), home_adv=float(best["home_adv"])), table
+    return EloConfig(k=float(best["k"]), home_adv=float(best["home_adv"]), home_k=float(best["home_k"])), table
 
 
 def fmt_table(df: pd.DataFrame) -> str:
