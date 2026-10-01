@@ -49,3 +49,13 @@ advantage, which would make the Elo comparison unfair. I am adding
 tuned on the same seasons as Model 1. H2 is still tested against Model 1, as
 registered; Model 3 vs. Model 1b is reported alongside it as the fairer
 comparison. H1 to H6 are unchanged.
+
+**2026-10-01, written AFTER seeing step 2 results (exploratory, not
+pre-registered).** Tuning on 2015-16 to 2018-19 chose a home-advantage
+learning rate of 0 for Model 1b, so it ended up identical to Model 1 and did
+not remove LightGBM's advantage of being retrained each season. I am adding
+**Model 1c** as a robustness check: before each test season, Elo's K and home
+advantage are re-tuned on all earlier non-warm-up seasons, exactly as
+LightGBM is retrained. The home-advantage grid is widened to 0-125 Elo points
+(steps of 25) so the grid cannot cap the answer. Model 1c is reported as
+exploratory; the registered tests (H2 against Model 1) stand as they are.
