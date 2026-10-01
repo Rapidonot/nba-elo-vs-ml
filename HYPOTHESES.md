@@ -59,3 +59,23 @@ advantage are re-tuned on all earlier non-warm-up seasons, exactly as
 LightGBM is retrained. The home-advantage grid is widened to 0-125 Elo points
 (steps of 25) so the grid cannot cap the answer. Model 1c is reported as
 exploratory; the registered tests (H2 against Model 1) stand as they are.
+
+**2026-10-01, written before any step 3 analysis was run.** How H4 to H6 will
+be measured (hypotheses unchanged; this only fixes the definitions):
+- *H4 ladder:* LightGBM rungs L0 = Elo features only, L1 = + team strength,
+  L2 = + four factors, L3 = + situation, L4 = + travel (= Model 3). Every rung
+  is tuned and walk-forward tested exactly like Model 3. "Most of the gain" =
+  the L0 to L1 step gives more than half of the total L0 to L4 log-loss
+  improvement. Situation and travel gains are judged by the bootstrap rule on
+  the L2 to L3 and L3 to L4 steps. Leave-one-group-out (Model 3 minus each
+  group) is reported as a check on the ladder order.
+- *H5:* an "early" game is one where both teams have played fewer than 20
+  games that season before tip-off; all other games are "later". The gap is
+  Model 1's log loss minus Model 3's. H5 holds if the early gap is larger than
+  the later gap and the bootstrap interval for (early gap minus later gap)
+  excludes zero.
+- *H6:* home-court advantage = share of games won by the home team. Compared
+  for 2020-21 against the 2015-16 to 2018-19 average. "Over-predict" = Model 1's
+  mean predicted home-win probability minus the actual home-win rate, with a
+  bootstrap interval; reported for every test season so 2020-21 can be
+  compared with the others.
