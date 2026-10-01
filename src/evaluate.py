@@ -54,6 +54,25 @@ def bootstrap_log_loss_diff(y, p_a, p_b, n_boot: int = 2000, seed: int = 42) -> 
     }
 
 
+def bootstrap_mean(x, n_boot: int = 2000, seed: int = 42) -> dict:
+    """Mean of per-game values with a 95% bootstrap interval."""
+    x = np.asarray(x, dtype=float)
+    rng = np.random.default_rng(seed)
+    means = np.array([x[rng.integers(0, len(x), len(x))].mean() for _ in range(n_boot)])
+    return {"mean": float(x.mean()), "ci_low": float(np.percentile(means, 2.5)),
+            "ci_high": float(np.percentile(means, 97.5))}
+
+
+def bootstrap_group_gap(x_a, x_b, n_boot: int = 2000, seed: int = 42) -> dict:
+    """Is the mean of group A different from group B? (resamples each group separately)"""
+    x_a, x_b = np.asarray(x_a, dtype=float), np.asarray(x_b, dtype=float)
+    rng = np.random.default_rng(seed)
+    diffs = np.array([x_a[rng.integers(0, len(x_a), len(x_a))].mean()
+                      - x_b[rng.integers(0, len(x_b), len(x_b))].mean() for _ in range(n_boot)])
+    return {"mean_diff": float(x_a.mean() - x_b.mean()), "ci_low": float(np.percentile(diffs, 2.5)),
+            "ci_high": float(np.percentile(diffs, 97.5))}
+
+
 def calibration_plot(y, preds: dict, path: Path, n_bins: int = 10, title: str = "") -> None:
     """Predicted probability (x) vs. how often the home team actually won (y)."""
     y = np.asarray(y, dtype=float)
