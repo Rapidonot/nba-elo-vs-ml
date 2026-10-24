@@ -1,17 +1,17 @@
 # Live scoreboard: 2026-27
 
-Updated 2026-10-23 04:00 UTC. 15 finished games with predictions made before tip-off (16 predicted in total).
+Updated 2026-10-24 04:00 UTC. 23 finished games with predictions made before tip-off (28 predicted in total).
 
 | model | n_games | accuracy | log_loss | brier |
 |---|---|---|---|---|
-| Model 1c: Elo | 15 | 0.5333 | 0.6210 | 0.2192 |
-| Model 3: LightGBM + Elo | 15 | 0.5333 | 0.6304 | 0.2209 |
+| Model 1c: Elo | 23 | 0.5217 | 0.6247 | 0.2201 |
+| Model 3: LightGBM + Elo | 23 | 0.5652 | 0.6304 | 0.2207 |
 
 ## Model 3 minus Model 1c (log loss, paired bootstrap)
 Negative = Model 3 better. A gap counts only if the 95% interval excludes 0.
 
 | mean_diff | ci_low | ci_high | share_A_better |
 |---|---|---|---|
-| 0.0094 | -0.0380 | 0.0555 | 0.3395 |
+| 0.0056 | -0.0295 | 0.0401 | 0.3895 |
 
-Home teams have won 60.0% of these games.
+Home teams have won 47.8% of these games.
